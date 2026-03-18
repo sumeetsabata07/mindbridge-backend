@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const https = require("https");
-require("dotenv").config();
+// dotenv not needed on Railway
 
 const app = express();
 
