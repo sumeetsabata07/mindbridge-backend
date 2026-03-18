@@ -1,15 +1,11 @@
 const express = require("express");
 const cors = require("cors");
-const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
+const https = require("https");
 require("dotenv").config();
 
 const app = express();
 
-app.use(cors({
-  origin: "*",
-  methods: ["POST", "GET"],
-}));
-
+app.use(cors({ origin: "*", methods: ["POST", "GET"] }));
 app.use(express.json());
 
 app.get("/", (req, res) => {
@@ -20,22 +16,41 @@ app.post("/chat", async (req, res) => {
   try {
     const { messages } = req.body;
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const payload = JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 1000,
+      system: "You are a compassionate and empathetic AI mental health companion for MindBridge AI. Listen actively, provide emotional support, suggest coping strategies, encourage professional help when needed, and keep responses warm and concise (2-4 sentences). Never diagnose. Always prioritize safety. For self-harm or suicide mentions, provide crisis resources immediately.",
+      messages: messages,
+    });
+
+    const options = {
+      hostname: "api.anthropic.com",
+      path: "/v1/messages",
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "x-api-key": process.env.ANTHROPIC_API_KEY,
         "anthropic-version": "2023-06-01",
+        "Content-Length": Buffer.byteLength(payload),
       },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1000,
-        system: "You are a compassionate and empathetic AI mental health companion for MindBridge AI. Your role is to: Listen actively and with empathy, Provide emotional support and validation, Suggest practical coping strategies when appropriate, Encourage professional help when needed, Keep responses warm, concise, and supportive (2-4 sentences usually), Never diagnose or replace professional mental health care, Always prioritize the user's safety and wellbeing. If someone expresses thoughts of self-harm or suicide, immediately provide crisis resources and encourage them to seek help.",
-        messages: messages,
-      }),
-    });
+    };
 
-    const data = await response.json();
+    const data = await new Promise((resolve, reject) => {
+      const request = https.request(options, (response) => {
+        let body = "";
+        response.on("data", (chunk) => { body += chunk; });
+        response.on("end", () => {
+          try {
+            resolve(JSON.parse(body));
+          } catch (e) {
+            reject(e);
+          }
+        });
+      });
+      request.on("error", reject);
+      request.write(payload);
+      request.end();
+    });
 
     if (data.error) {
       return res.status(400).json({ error: data.error.message });
